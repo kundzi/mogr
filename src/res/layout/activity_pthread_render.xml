@@ -5,6 +5,12 @@
     android:gravity="bottom"
     android:orientation="vertical"
     tools:context=".PthreadRender" >
+    
+    
+    <SurfaceView 
+        android:id="@+id/surface"
+        android:layout_width="match_parent"
+        android:layout_height="400dp"/>
 
     <Button
         android:id="@+id/start"
