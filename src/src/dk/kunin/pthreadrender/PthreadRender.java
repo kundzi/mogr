@@ -17,6 +17,7 @@ import javax.microedition.khronos.egl.EGLSurface;
 import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceHolder.Callback;
 import android.view.SurfaceView;
@@ -35,7 +36,6 @@ public class PthreadRender extends Activity implements Callback {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_pthread_render);
     mSurfaceView = (SurfaceView) findViewById(R.id.surface);
-
     mSurfaceView.getHolder().addCallback(this);
 
     findViewById(R.id.start).setOnClickListener(new OnClickListener() {
@@ -54,7 +54,7 @@ public class PthreadRender extends Activity implements Callback {
   }
 
   private void callback() {
-    createContext();
+//    createContext();
   }
 
 
@@ -243,17 +243,19 @@ public class PthreadRender extends Activity implements Callback {
 
   @Override
   public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-    // TODO Auto-generated method stub
+    // TODO should we pass something here?
   }
 
   @Override
   public void surfaceCreated(SurfaceHolder holder) {
     mHolder = holder;
+    nativeOnCreateSurface(mHolder.getSurface());
   }
 
   @Override
   public void surfaceDestroyed(SurfaceHolder holder) {
     mHolder = null;
+    nativeOnDestroySurface();
   }
 
   private void log(final String message)
@@ -282,4 +284,6 @@ public class PthreadRender extends Activity implements Callback {
     return egl.eglGetError();
   }
 
+  private native void nativeOnCreateSurface(Surface surface);
+  private native void nativeOnDestroySurface();
 }
