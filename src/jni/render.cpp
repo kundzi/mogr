@@ -1,5 +1,7 @@
 // local includes
 #include "gl_help.h"
+#include "glrenderer.hpp"
+#include "android.hpp"
 
 // system includes
 #include <jni.h>
@@ -16,16 +18,10 @@
  */
 #include <EGL/egl.h>
 /*
- * Using logs
- */
-#include <android/log.h>
-/*
  * And use native_window
  */
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
-
-#define  LOG(...)  __android_log_print(ANDROID_LOG_ERROR,"PTHREADRENDER",__VA_ARGS__)
 
 extern "C"
 {
@@ -35,38 +31,22 @@ extern "C"
   EGLContext _context;
   EGLConfig _config;
 
+  GlRenderer * _renderer;
 
   //{@ DONT TOUCH
-  bool g_isRunning = false;
   JavaVM * g_JavaVM;
-  jobject g_callbackObj;
 
   JNIEXPORT jint JNICALL
   JNI_OnLoad(JavaVM* vm, void* reserved)
   {
     g_JavaVM = vm;
+    _renderer = new GlRenderer(vm);
     return JNI_VERSION_1_6;
   }
 
-  void * run(void* param)
+
+  int config_comp(const void * l, const void * r)
   {
-    JNIEnv * env;
-    g_JavaVM->GetEnv((void**) &env, JNI_VERSION_1_6);
-    g_JavaVM->AttachCurrentThread(&env, NULL);
-
-    jclass clazz = env->GetObjectClass(g_callbackObj);
-    jmethodID mid = env->GetMethodID(clazz, "callback", "()V");
-    env->CallVoidMethod(g_callbackObj, mid);
-
-    while (g_isRunning)
-      {
-        // do nothing
-      }
-
-    return NULL;
-  } // dont touch
-
-  int config_comp(const void * l, const void * r) {
     return gl_help_compare_config(l, r, _display);
   }
 
@@ -128,14 +108,33 @@ extern "C"
     assert(_context);
     LOG("CONTEXT CREATED");
 
-    // binding context
-    assert(eglMakeCurrent(_display, _surface, _surface, _context));
-    LOG("CONTEXT BINDED");
+    _renderer->SetUpEgl(_config, _context, _surface, _display);
+    _renderer->Start();
+
+    // TODO move to threads
+//    // binding context
+//    assert(eglMakeCurrent(_display, _surface, _surface, _context));
+//    LOG("CONTEXT BINDED");
   }
 
   void destroyEgl(JNIEnv * env)
   {
+    _renderer->Stop();
+
     // destroy egl
+    if (_display != EGL_NO_DISPLAY)
+    {
+        if (_context != EGL_NO_CONTEXT)
+          eglDestroyContext(_display, _context);
+
+        if (_surface != EGL_NO_SURFACE)
+          eglDestroySurface(_display, _surface);
+
+        eglTerminate(_display);
+
+        LOG("EGL TERMINATED");
+    }
+
     ANativeWindow_release(_nativeWindow);
     _nativeWindow = NULL;
   }
@@ -151,31 +150,5 @@ extern "C"
   {
     destroyEgl(env);
   }
-
-
-  //{@ DONT TOUCH
-  JNIEXPORT void JNICALL
-  Java_dk_kunin_pthreadrender_PthreadRender_startThreads(JNIEnv * env, jobject thiz)
-  {
-    if (!g_isRunning)
-      {
-        g_isRunning = true;
-        g_callbackObj = env->NewGlobalRef(thiz);
-
-        // run threads
-        pthread_t pid1;
-        pthread_create(&pid1, NULL, run, NULL);
-
-        pthread_t pid2;
-        pthread_create(&pid2, NULL, run, NULL);
-      }
-  }
-
-  JNIEXPORT void JNICALL
-  Java_dk_kunin_pthreadrender_PthreadRender_stopThreads(JNIEnv * env, jobject thiz)
-  {
-    g_isRunning = false;
-    env->DeleteGlobalRef(g_callbackObj);
-  } // dont touch
 
 } // extern "C"

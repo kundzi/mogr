@@ -3,7 +3,8 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE    := render
-LOCAL_SRC_FILES := render.cpp
+LOCAL_SRC_FILES := render.cpp \
+	glrenderer.cpp \
 
 LOCAL_LDLIBS += -llog -lGLESv2 -lEGL -landroid
 

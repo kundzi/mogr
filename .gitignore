@@ -16,3 +16,6 @@ RELEASE/
 .project
 local.properties
 lint.xml
+src/libs/armeabi/gdb.setup
+src/libs/armeabi/gdbserver
+src/libs/armeabi/librender.so
