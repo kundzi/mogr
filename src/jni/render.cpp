@@ -40,7 +40,8 @@ extern "C"
   JNI_OnLoad(JavaVM* vm, void* reserved)
   {
     g_JavaVM = vm;
-    _renderer = new GlRenderer(vm);
+    // TODO: move somewhere else
+    _renderer = new GlRenderer();
     return JNI_VERSION_1_6;
   }
 

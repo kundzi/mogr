@@ -9,7 +9,6 @@ class GlRenderer
 {
 private:
   bool _isRunning;
-  JavaVM * _jvm;
 
   //{@ egl
   EGLConfig  _eglConfig;
@@ -37,8 +36,8 @@ private:
 
 
 public:
-  GlRenderer(JavaVM * jvm)
-    : _isRunning(false), _jvm(jvm),
+  GlRenderer()
+    : _isRunning(false),
       _eglConfig(0),
       _eglContext(EGL_NO_CONTEXT),
       _eglSurface(EGL_NO_SURFACE),
