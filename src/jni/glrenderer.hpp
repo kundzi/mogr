@@ -39,6 +39,7 @@ private:
   //{@ openGl
   GLuint _bufferId;
   GLuint _programId;
+  GLuint _vao;
   //}@
 
 public:
@@ -56,6 +57,7 @@ public:
       _updateThread(0),
       _bufferId(0),
       _programId(0),
+      _vao(0),
       width(400),
       height(400)
     {}

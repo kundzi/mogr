@@ -7,8 +7,14 @@
 #include <assert.h>
 #include <unistd.h>
 
+#include <GLES2/gl2ext.h>
+
 #include "matrix.hpp"
 #include "transformations.hpp"
+
+PFNGLGENVERTEXARRAYSOESPROC _genVertexArray;
+PFNGLDELETEVERTEXARRAYSOESPROC _deleteVertexArray;
+PFNGLBINDVERTEXARRAYOESPROC _bindVertexArray;
 
 #define GL_CHECK(x) { x; \
   GLenum error = glGetError(); \
@@ -107,12 +113,26 @@ void GlRenderer::RunMainThread()
   LOG("MAIN THREAD RESUMED");
   pthread_mutex_unlock(&_mutex);
 
+  //{@
+  GL_CHECK(glUseProgram(_programId));
+  GL_CHECK(_genVertexArray(1, &_vao));
+  GL_CHECK(_bindVertexArray(_vao));
+  LOG("VAO IS: %d", _vao);
+
+  GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, _bufferId));
+
+  GLint posAttrLoc =  glGetAttribLocation(_programId, "position");
+  GL_CHECK_AFTER();
+  assert(posAttrLoc != -1);
+
+  GL_CHECK(glEnableVertexAttribArray(posAttrLoc));
+  GL_CHECK(glVertexAttribPointer(posAttrLoc, 2, GL_FLOAT, GL_FALSE, 0, NULL));
+  GL_CHECK(_bindVertexArray(0));
+  //}@
+
   while (_isRunning)
   {
-//    pthread_mutex_lock(&_drawMutex);
     Draw();
-//    pthread_mutex_unlock(&_drawMutex);
-
     assert(eglSwapBuffers(_eglDisplay, _eglSurface) == EGL_TRUE);
     usleep(1000*1000/25);
   }
@@ -134,19 +154,18 @@ void GlRenderer::RunUpdateThread()
   LOG("SHARED CONTEXT OK");
 
   //simulate resource initialization
-  pthread_mutex_lock(&_mutex);
   LOG("START INIT RESOURSES");
+  _genVertexArray = reinterpret_cast<PFNGLGENVERTEXARRAYSOESPROC>(eglGetProcAddress("glGenVertexArraysOES"));
+  _bindVertexArray = reinterpret_cast<PFNGLBINDVERTEXARRAYOESPROC>(eglGetProcAddress("glBindVertexArrayOES"));
+
+
   Init();
   pthread_cond_broadcast(&_cond);
   LOG("RESOURSES OK");
-  pthread_mutex_unlock(&_mutex);
 
   while (_isRunning)
   {
-//    pthread_mutex_lock(&_drawMutex);
     Update();
-//    pthread_mutex_unlock(&_drawMutex);
-
     usleep(1000*1000/25);
   }
 
@@ -236,6 +255,7 @@ void GlRenderer::Init()
   GL_CHECK(glBufferData(GL_ARRAY_BUFFER, sizeof(_vertexData), _vertexData, GL_DYNAMIC_DRAW));
   GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, 0));
 
+
   GL_CHECK(glFlush());
 }
 
@@ -244,15 +264,7 @@ void GlRenderer::Draw()
   glViewport(0,0, width, height);
 
   GL_CHECK(glUseProgram(_programId));
-
-  GLint posAttrLoc =  glGetAttribLocation(_programId, "position");
-  GL_CHECK_AFTER();
-  assert(posAttrLoc != -1);
-
-  GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, _bufferId));
-  GL_CHECK(glEnableVertexAttribArray(posAttrLoc));
-
-  GL_CHECK(glVertexAttribPointer(posAttrLoc, 2, GL_FLOAT, GL_FALSE, 0, NULL));
+  GL_CHECK(_bindVertexArray(_vao));
 
   GLint colorPos = glGetUniformLocation(_programId, "color");
   GL_CHECK_AFTER();
@@ -289,8 +301,7 @@ void GlRenderer::Draw()
 
   GL_CHECK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
 
-  GL_CHECK(glDisableVertexAttribArray(posAttrLoc));
-  GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, 0));
+  GL_CHECK(_bindVertexArray(0));
   GL_CHECK(glUseProgram(0));
 }
 
@@ -302,22 +313,10 @@ void GlRenderer::Update()
 
 
   float points[4*2];
-//  memcpy(points, _vertexData, 8*sizeof(float));
-
-//  res.x = x * m(0, 0) + y * m(1, 0) + m(2, 0);
-//  res.y = x * m(0, 1) + y * m(1, 1) + m(2, 1);
   for (int i = 0; i < 8; i+=2)
   {
     points[i] = _vertexData[i] * m(0, 0) + _vertexData[i + 1] * m(1, 0) + m(2, 0);
     points[i + 1] = _vertexData[i] * m(0, 1) + _vertexData[i + 1] * m(1, 1) + m(2, 1);
-  }
-
-  static bool isLogged = false;
-  if (!isLogged)
-  {
-    isLogged = true;
-    for (int i = 0; i < 8; i+=2)
-      LOG("%f %f", points[i], points[i + 1]);
   }
 
   GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, _bufferId));
