@@ -6,19 +6,49 @@
 
 void GlRenderer::Start()
 {
-  assert(_eglContext != EGL_NO_CONTEXT);
-  assert(_eglSurface != EGL_NO_SURFACE);
-  assert(_eglDisplay != EGL_NO_DISPLAY);
 
-  _isRunning = true;
+  if (!_isRunning)
+  {
+    LOG("INITIALAZING PTHREAD");
 
-  pthread_create(&_mainThread, NULL, GlRenderer::_runMainThread, (void*)this);
-  pthread_create(&_updateThread, NULL, GlRenderer::_runUpdateThread, (void*)this);
+    assert(_eglContext != EGL_NO_CONTEXT);
+    assert(_eglSurface != EGL_NO_SURFACE);
+    assert(_eglDisplay != EGL_NO_DISPLAY);
+
+    _isRunning = true;
+
+    // create sync objects
+    pthread_mutex_init(&_mutex, NULL);
+    pthread_cond_init(&_cond, NULL);
+
+    // create joinable threads
+    pthread_attr_init(&_attrs);
+    pthread_attr_setdetachstate(&_attrs, PTHREAD_CREATE_JOINABLE);
+
+    pthread_create(&_mainThread, &_attrs, GlRenderer::_runMainThread, (void*)this);
+    pthread_create(&_updateThread, &_attrs, GlRenderer::_runUpdateThread, (void*)this);
+
+    LOG("PTHREAD OK");
+  }
 }
 
 void GlRenderer::Stop()
 {
-  _isRunning = false;
+  if (_isRunning)
+  {
+    LOG("STOPPING PTHREAD");
+
+    _isRunning = false;
+
+    pthread_join(_mainThread, NULL);
+    pthread_join(_updateThread, NULL);
+
+    pthread_attr_destroy(&_attrs);
+    pthread_mutex_destroy(&_mutex);
+    pthread_cond_destroy(&_cond);
+
+    LOG("PTHREAD STOPPED");
+  }
 }
 
 void GlRenderer::SetUpEgl(EGLConfig  eglConfig,  EGLContext eglContext,
@@ -56,7 +86,7 @@ void GlRenderer::RunUpdateThread()
   _eglSharedContext = eglCreateContext(_eglDisplay,_eglConfig, _eglContext, contextAttrList);
   assert(_eglSharedContext != EGL_NO_CONTEXT);
   assert(eglMakeCurrent(_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, _eglSharedContext));
-  LOG("Shared context OK");
+  LOG("SHARED CONTEXT OK");
 
   while (_isRunning)
   {

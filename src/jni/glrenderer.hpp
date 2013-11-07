@@ -27,6 +27,7 @@ private:
   static void * _runMainThread(void * thiz);
   static void * _runUpdateThread(void * thiz);
 
+  pthread_attr_t _attrs;
   pthread_t _mainThread;
   pthread_t _updateThread;
 
@@ -38,7 +39,7 @@ private:
 public:
   GlRenderer()
     : _isRunning(false),
-      _eglConfig(0),
+      _eglConfig(NULL),
       _eglContext(EGL_NO_CONTEXT),
       _eglSurface(EGL_NO_SURFACE),
       _eglDisplay(EGL_NO_DISPLAY),
@@ -46,6 +47,11 @@ public:
       _mainThread(0),
       _updateThread(0)
     {}
+
+  ~GlRenderer()
+  {
+    Stop();
+  }
 
   void Start();
   void Stop();
