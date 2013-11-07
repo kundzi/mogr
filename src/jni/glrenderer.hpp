@@ -33,10 +33,18 @@ private:
 
   pthread_cond_t _cond;
   pthread_mutex_t _mutex;
+  pthread_mutex_t _drawMutex;
   //}@ threading
 
+  //{@ openGl
+  GLuint _bufferId;
+  GLuint _programId;
+  //}@
 
 public:
+  int width;
+  int height;
+
   GlRenderer()
     : _isRunning(false),
       _eglConfig(NULL),
@@ -45,7 +53,11 @@ public:
       _eglDisplay(EGL_NO_DISPLAY),
       _eglSharedContext(EGL_NO_CONTEXT),
       _mainThread(0),
-      _updateThread(0)
+      _updateThread(0),
+      _bufferId(0),
+      _programId(0),
+      width(400),
+      height(400)
     {}
 
   ~GlRenderer()
@@ -57,4 +69,12 @@ public:
   void Stop();
   void SetUpEgl(EGLConfig  eglConfig,  EGLContext eglContext,
                 EGLSurface eglSurface, EGLDisplay eglDisplay);
+
+  void Init();
+
+  void Draw();
+  void Update();
+
+  GLuint LoadShader(const char * shaderSrc, GLenum type);
+  void   LinkProgram();
 };

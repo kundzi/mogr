@@ -21,8 +21,6 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceHolder.Callback;
 import android.view.SurfaceView;
-import android.view.View;
-import android.view.View.OnClickListener;
 import android.widget.Toast;
 
 public class PthreadRender extends Activity implements Callback {
@@ -38,19 +36,6 @@ public class PthreadRender extends Activity implements Callback {
     mSurfaceView = (SurfaceView) findViewById(R.id.surface);
     mSurfaceView.getHolder().addCallback(this);
 
-    findViewById(R.id.start).setOnClickListener(new OnClickListener() {
-      @Override
-      public void onClick(View v) {
-        startThreads();
-      }
-    });
-
-    findViewById(R.id.stop).setOnClickListener(new OnClickListener() {
-      @Override
-      public void onClick(View v) {
-        stopThreads();
-      }
-    });
   }
 
   private void callback() {
@@ -243,7 +228,7 @@ public class PthreadRender extends Activity implements Callback {
 
   @Override
   public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-    // TODO should we pass something here?
+    nativeOnSurfaceChanged(width, height);
   }
 
   @Override
@@ -286,4 +271,5 @@ public class PthreadRender extends Activity implements Callback {
 
   private native void nativeOnCreateSurface(Surface surface);
   private native void nativeOnDestroySurface();
+  private native void nativeOnSurfaceChanged(int width, int height);
 }

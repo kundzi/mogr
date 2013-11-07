@@ -12,16 +12,4 @@
         android:layout_width="match_parent"
         android:layout_height="400dp"/>
 
-    <Button
-        android:id="@+id/start"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Start" />
-
-    <Button
-        android:id="@+id/stop"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Stop" />
-
 </LinearLayout>

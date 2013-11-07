@@ -152,4 +152,11 @@ extern "C"
     destroyEgl(env);
   }
 
+  JNIEXPORT void JNICALL
+  Java_dk_kunin_pthreadrender_PthreadRender_nativeOnSurfaceChanged(JNIEnv * env, jobject thiz, jint width, jint height)
+  {
+    _renderer->width = width;
+    _renderer->height = height;
+  }
+
 } // extern "C"

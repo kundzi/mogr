@@ -1,9 +1,40 @@
 #include "glrenderer.hpp"
 #include "transformations.hpp"
 #include "android.hpp"
+#include "shaders.h"
 
+#include <string>
 #include <assert.h>
 #include <unistd.h>
+
+#include "matrix.hpp"
+#include "transformations.hpp"
+
+#define GL_CHECK(x) { x; \
+  GLenum error = glGetError(); \
+  if (error != GL_NO_ERROR) \
+  { \
+    LOG("GL ERROR: %x", (int)error); \
+    assert(false); \
+  } \
+}
+
+#define GL_CHECK_AFTER()  {\
+    int i; \
+    GL_CHECK(reinterpret_cast<void*>(i)); \
+    }
+
+using std::string;
+
+namespace {
+  float _vertexData[4 /*vertexes*/ * 2 /*dimensions*/] =
+  {
+    -1.5, -1.5,
+     0.5, -1.5,
+    -1.5,  0.5,
+     0.5,  0.5
+  };
+}
 
 void GlRenderer::Start()
 {
@@ -19,6 +50,7 @@ void GlRenderer::Start()
     _isRunning = true;
 
     // create sync objects
+    pthread_mutex_init(&_drawMutex, NULL);
     pthread_mutex_init(&_mutex, NULL);
     pthread_cond_init(&_cond, NULL);
 
@@ -46,6 +78,7 @@ void GlRenderer::Stop()
 
     pthread_attr_destroy(&_attrs);
     pthread_mutex_destroy(&_mutex);
+    pthread_mutex_destroy(&_drawMutex);
     pthread_cond_destroy(&_cond);
 
     LOG("PTHREAD STOPPED");
@@ -76,6 +109,12 @@ void GlRenderer::RunMainThread()
 
   while (_isRunning)
   {
+//    pthread_mutex_lock(&_drawMutex);
+    Draw();
+//    pthread_mutex_unlock(&_drawMutex);
+
+    assert(eglSwapBuffers(_eglDisplay, _eglSurface) == EGL_TRUE);
+    usleep(1000*1000/25);
   }
 
   eglMakeCurrent(_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -97,15 +136,18 @@ void GlRenderer::RunUpdateThread()
   //simulate resource initialization
   pthread_mutex_lock(&_mutex);
   LOG("START INIT RESOURSES");
-  sleep(3);
+  Init();
   pthread_cond_broadcast(&_cond);
   LOG("RESOURSES OK");
   pthread_mutex_unlock(&_mutex);
 
   while (_isRunning)
   {
-//    sleep(1);
-    //LOG("UPDATE THREAD LOOP");
+//    pthread_mutex_lock(&_drawMutex);
+    Update();
+//    pthread_mutex_unlock(&_drawMutex);
+
+    usleep(1000*1000/25);
   }
 
   // unbind context
@@ -126,4 +168,161 @@ void * GlRenderer::_runUpdateThread(void * thiz)
   assert(thiz);
   ((GlRenderer*)thiz)->RunUpdateThread();
   return 0;
+}
+
+GLuint GlRenderer::LoadShader(const char * shaderSrc, GLenum type)
+{
+  GLuint shaderId = glCreateShader(type);
+  GL_CHECK_AFTER();
+
+  GL_CHECK(glShaderSource(shaderId, 1, &shaderSrc, NULL));
+  GL_CHECK(glCompileShader(shaderId));
+
+  GLint compileResult = GL_FALSE;
+  glGetShaderiv(shaderId, GL_COMPILE_STATUS, &compileResult);
+
+  if (compileResult != GL_TRUE)
+  {
+    GLchar buff[1024];
+    GLint lengh = 0;
+    glGetShaderInfoLog(shaderId, 1024, &lengh, buff);
+
+    LOG("%s", (string("SHADER COMPILE ERROR: ") + string(buff, lengh)).c_str());
+    assert(false);
+  }
+
+  return shaderId;
+}
+
+void GlRenderer::LinkProgram()
+{
+  _programId = glCreateProgram();
+  GL_CHECK_AFTER();
+
+  GLuint vShader = LoadShader(Shaders::Vertex, GL_VERTEX_SHADER);
+  GLuint fShader = LoadShader(Shaders::Fragment, GL_FRAGMENT_SHADER);
+
+  GL_CHECK(glAttachShader(_programId, vShader));
+  GL_CHECK(glAttachShader(_programId, fShader));
+
+  GL_CHECK(glLinkProgram(_programId));
+
+  GLint linkRes = GL_FALSE;
+  glGetProgramiv(_programId, GL_LINK_STATUS, &linkRes);
+
+  if (linkRes != GL_TRUE)
+  {
+    GLchar buff[1024];
+    GLint lengh = 0;
+    glGetProgramInfoLog(_programId, 1024, &lengh, buff);
+
+    LOG("%s", (string("PROGRAM LINK ERROR: ") + string(buff, lengh)).c_str());
+    assert(false);
+  }
+
+  GL_CHECK(glDetachShader(_programId, vShader));
+  GL_CHECK(glDetachShader(_programId, fShader));
+
+  GL_CHECK(glDeleteShader(vShader));
+  GL_CHECK(glDeleteShader(fShader));
+}
+
+void GlRenderer::Init()
+{
+  LinkProgram();
+  GL_CHECK(glGenBuffers(1, &_bufferId));
+
+  GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, _bufferId));
+  GL_CHECK(glBufferData(GL_ARRAY_BUFFER, sizeof(_vertexData), _vertexData, GL_DYNAMIC_DRAW));
+  GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, 0));
+
+  GL_CHECK(glFlush());
+}
+
+void GlRenderer::Draw()
+{
+  glViewport(0,0, width, height);
+
+  GL_CHECK(glUseProgram(_programId));
+
+  GLint posAttrLoc =  glGetAttribLocation(_programId, "position");
+  GL_CHECK_AFTER();
+  assert(posAttrLoc != -1);
+
+  GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, _bufferId));
+  GL_CHECK(glEnableVertexAttribArray(posAttrLoc));
+
+  GL_CHECK(glVertexAttribPointer(posAttrLoc, 2, GL_FLOAT, GL_FALSE, 0, NULL));
+
+  GLint colorPos = glGetUniformLocation(_programId, "color");
+  GL_CHECK_AFTER();
+  assert(colorPos != -1);
+
+  GL_CHECK(glUniform4f(colorPos, 1.0, 0.0, 0.0, 1.0));
+
+  GLint modelViewLoc = glGetUniformLocation(_programId, "modelViewMatrix");
+  GL_CHECK_AFTER();
+  assert(modelViewLoc != -1);
+
+  GLint projectionLoc = glGetUniformLocation(_programId, "projectionMatrix");
+  GL_CHECK_AFTER();
+  assert(projectionLoc != -1);
+
+  float modelView[16] =
+  {
+    -1.0, 0.0,  0.0, 0.0,
+     0.0, 1.0,  0.0, 0.0,
+     0.0, 0.0, -1.0, 0.0,
+     0.0, 0.0, -1.0, 1.0
+  };
+
+  float projectionMatrix[16] =
+  {
+    0.5, 0.0, 0.0, 0.0,
+    0.0, 0.5, 0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0,
+    0.0, 0.0, 0.0, 1.0
+  };
+
+  GL_CHECK(glUniformMatrix4fv(modelViewLoc, 1, GL_FALSE, modelView));
+  GL_CHECK(glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, projectionMatrix));
+
+  GL_CHECK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
+
+  GL_CHECK(glDisableVertexAttribArray(posAttrLoc));
+  GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, 0));
+  GL_CHECK(glUseProgram(0));
+}
+
+void GlRenderer::Update()
+{
+  static float angle = .0f;
+  angle += 0.0125f;
+  math::Matrix<double, 3, 3> m = math::Rotate(math::Identity<double, 3>(), angle);
+
+
+  float points[4*2];
+//  memcpy(points, _vertexData, 8*sizeof(float));
+
+//  res.x = x * m(0, 0) + y * m(1, 0) + m(2, 0);
+//  res.y = x * m(0, 1) + y * m(1, 1) + m(2, 1);
+  for (int i = 0; i < 8; i+=2)
+  {
+    points[i] = _vertexData[i] * m(0, 0) + _vertexData[i + 1] * m(1, 0) + m(2, 0);
+    points[i + 1] = _vertexData[i] * m(0, 1) + _vertexData[i + 1] * m(1, 1) + m(2, 1);
+  }
+
+  static bool isLogged = false;
+  if (!isLogged)
+  {
+    isLogged = true;
+    for (int i = 0; i < 8; i+=2)
+      LOG("%f %f", points[i], points[i + 1]);
+  }
+
+  GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, _bufferId));
+  GL_CHECK(glBufferSubData(GL_ARRAY_BUFFER ,0, sizeof(points), points));
+  GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, 0));
+
+  GL_CHECK(glFlush());
 }
