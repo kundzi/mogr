@@ -56,7 +56,6 @@ void GlRenderer::Start()
     _isRunning = true;
 
     // create sync objects
-    pthread_mutex_init(&_drawMutex, NULL);
     pthread_mutex_init(&_mutex, NULL);
     pthread_cond_init(&_cond, NULL);
 
@@ -84,7 +83,6 @@ void GlRenderer::Stop()
 
     pthread_attr_destroy(&_attrs);
     pthread_mutex_destroy(&_mutex);
-    pthread_mutex_destroy(&_drawMutex);
     pthread_cond_destroy(&_cond);
 
     LOG("PTHREAD STOPPED");

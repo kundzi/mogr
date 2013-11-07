@@ -33,7 +33,6 @@ private:
 
   pthread_cond_t _cond;
   pthread_mutex_t _mutex;
-  pthread_mutex_t _drawMutex;
   //}@ threading
 
   //{@ openGl
@@ -73,7 +72,6 @@ public:
                 EGLSurface eglSurface, EGLDisplay eglDisplay);
 
   void Init();
-
   void Draw();
   void Update();
 
