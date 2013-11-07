@@ -66,10 +66,15 @@ void GlRenderer::RunMainThread()
   assert(eglMakeCurrent(_eglDisplay, _eglSurface, _eglSurface, _eglContext));
   LOG("MAIN CONTEXT OK");
 
+  // wait before update thread initialize resources
+  pthread_mutex_lock(&_mutex);
+  LOG("WAITING FOR UPDATE THREAD");
+  pthread_cond_wait(&_cond, &_mutex);
+  LOG("MAIN THREAD RESUMED");
+  pthread_mutex_unlock(&_mutex);
+
   while (_isRunning)
   {
-//    sleep(1);
-    //LOG("MAIN THREAD LOOP");
   }
 
   eglMakeCurrent(_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -87,6 +92,14 @@ void GlRenderer::RunUpdateThread()
   assert(_eglSharedContext != EGL_NO_CONTEXT);
   assert(eglMakeCurrent(_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, _eglSharedContext));
   LOG("SHARED CONTEXT OK");
+
+  //simulate resource initialization
+  pthread_mutex_lock(&_mutex);
+  LOG("START INIT RESOURSES");
+  sleep(3);
+  pthread_cond_broadcast(&_cond);
+  LOG("RESOURSES OK");
+  pthread_mutex_unlock(&_mutex);
 
   while (_isRunning)
   {
