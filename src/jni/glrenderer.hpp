@@ -44,6 +44,9 @@ private:
 public:
   int width;
   int height;
+  bool doLogUpdate;
+  bool doLogDraw;
+  bool doUpdate;
 
   GlRenderer()
     : _isRunning(false),
@@ -58,7 +61,10 @@ public:
       _programId(0),
       _vao(0),
       width(400),
-      height(400)
+      height(400),
+      doLogUpdate(false),
+      doLogDraw(false),
+      doUpdate(false)
     {}
 
   ~GlRenderer()

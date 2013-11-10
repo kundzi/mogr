@@ -17,33 +17,39 @@ PFNGLDELETEVERTEXARRAYSOESPROC _deleteVertexArray;
 PFNGLBINDVERTEXARRAYOESPROC _bindVertexArray;
 
 #define GL_CHECK(x) { x; \
-  GLenum error = glGetError(); \
-  if (error != GL_NO_ERROR) \
-  { \
-    LOG("GL ERROR: %x", (int)error); \
-    assert(false); \
-  } \
+    GLenum error = glGetError(); \
+    if (error != GL_NO_ERROR) \
+    { \
+      LOG("GL ERROR: %x", (int)error); \
+      assert(false); \
+    } \
 }
 
-#define GL_CHECK_AFTER()  {\
+#define GL_CHECK_AFTER()  { \
     int i; \
     GL_CHECK(reinterpret_cast<void*>(i)); \
-    }
+}
 
 using std::string;
 
 namespace {
-  float _vertexData[4 /*vertexes*/ * 2 /*dimensions*/] =
+  const float _vertexData[4 /*vertexes*/ * 2 /*dimensions*/] =
   {
     -1.5, -1.5,
      0.5, -1.5,
     -1.5,  0.5,
      0.5,  0.5
   };
+
+  const long FRAMERATE = 1000*1000/30;
+  const long UPDATERATE = 1000*1000/30;
 }
 
 void GlRenderer::Start()
 {
+  doLogDraw = true;
+  doLogUpdate = true;
+  doUpdate = true;
 
   if (!_isRunning)
   {
@@ -104,6 +110,11 @@ void GlRenderer::RunMainThread()
   assert(eglMakeCurrent(_eglDisplay, _eglSurface, _eglSurface, _eglContext));
   LOG("MAIN CONTEXT OK");
 
+  const char * exts =eglQueryString(_eglDisplay, EGL_EXTENSIONS);
+  LOG("EXTENS: %s", exts);
+  exts = eglQueryString(_eglDisplay, EGL_VERSION);
+  LOG("EGL_VERSION: %s", exts);
+
   // wait before update thread initialize resources
   pthread_mutex_lock(&_mutex);
   LOG("WAITING FOR UPDATE THREAD");
@@ -115,8 +126,8 @@ void GlRenderer::RunMainThread()
   GL_CHECK(glUseProgram(_programId));
   GL_CHECK(_genVertexArray(1, &_vao));
   GL_CHECK(_bindVertexArray(_vao));
-  LOG("VAO IS: %d", _vao);
 
+  LOG("VAO IS: %d", _vao);
   GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, _bufferId));
 
   GLint posAttrLoc =  glGetAttribLocation(_programId, "position");
@@ -128,11 +139,13 @@ void GlRenderer::RunMainThread()
   GL_CHECK(_bindVertexArray(0));
   //}@
 
+  // first update must be before first draw
+  Update();
   while (_isRunning)
   {
     Draw();
     assert(eglSwapBuffers(_eglDisplay, _eglSurface) == EGL_TRUE);
-    usleep(1000*1000/25);
+    usleep(FRAMERATE);
   }
 
   eglMakeCurrent(_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -146,16 +159,25 @@ void GlRenderer::RunUpdateThread()
     EGL_CONTEXT_CLIENT_VERSION, 2,
     EGL_NONE
   };
+  LOG("CREATING SHARED CONTEXT");
   _eglSharedContext = eglCreateContext(_eglDisplay,_eglConfig, _eglContext, contextAttrList);
+  EGLenum error = eglGetError();
+  LOG("EGL ERROR: %x", error);
   assert(_eglSharedContext != EGL_NO_CONTEXT);
-  assert(eglMakeCurrent(_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, _eglSharedContext));
+
+  GLuint size = 1 << 8;
+  EGLint surfConfig[] = { EGL_WIDTH, size, EGL_HEIGHT, size, EGL_NONE };
+  LOG("CREATING PBUFFER");
+  EGLSurface pixSurface = eglCreatePbufferSurface(_eglDisplay, _eglConfig, surfConfig);
+  assert(pixSurface != EGL_NO_SURFACE);
+  LOG("BINDING SHARED CONT");
+  assert(eglMakeCurrent(_eglDisplay, pixSurface, pixSurface, _eglSharedContext));
   LOG("SHARED CONTEXT OK");
 
   //simulate resource initialization
   LOG("START INIT RESOURSES");
   _genVertexArray = reinterpret_cast<PFNGLGENVERTEXARRAYSOESPROC>(eglGetProcAddress("glGenVertexArraysOES"));
   _bindVertexArray = reinterpret_cast<PFNGLBINDVERTEXARRAYOESPROC>(eglGetProcAddress("glBindVertexArrayOES"));
-
 
   Init();
   pthread_cond_broadcast(&_cond);
@@ -164,7 +186,7 @@ void GlRenderer::RunUpdateThread()
   while (_isRunning)
   {
     Update();
-    usleep(1000*1000/25);
+    usleep(UPDATERATE);
   }
 
   // unbind context
@@ -247,18 +269,26 @@ void GlRenderer::LinkProgram()
 void GlRenderer::Init()
 {
   LinkProgram();
+
   GL_CHECK(glGenBuffers(1, &_bufferId));
 
   GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, _bufferId));
   GL_CHECK(glBufferData(GL_ARRAY_BUFFER, sizeof(_vertexData), _vertexData, GL_DYNAMIC_DRAW));
   GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, 0));
 
-
   GL_CHECK(glFlush());
 }
 
 void GlRenderer::Draw()
 {
+  if (doLogDraw)
+  {
+    LOG("DRAWN");
+    doLogDraw = false;
+  }
+
+
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glViewport(0,0, width, height);
 
   GL_CHECK(glUseProgram(_programId));
@@ -278,6 +308,7 @@ void GlRenderer::Draw()
   GL_CHECK_AFTER();
   assert(projectionLoc != -1);
 
+  float aspect = (float)width/height;
   float modelView[16] =
   {
     -1.0, 0.0,  0.0, 0.0,
@@ -288,7 +319,7 @@ void GlRenderer::Draw()
 
   float projectionMatrix[16] =
   {
-    0.5, 0.0, 0.0, 0.0,
+    0.5/aspect, 0.0, 0.0, 0.0,
     0.0, 0.5, 0.0, 0.0,
     0.0, 0.0, 1.0, 0.0,
     0.0, 0.0, 0.0, 1.0
@@ -305,9 +336,15 @@ void GlRenderer::Draw()
 
 void GlRenderer::Update()
 {
+  if (doLogUpdate)
+  {
+    LOG("UPDATE");
+    doLogUpdate = false;
+  }
+
   static float angle = .0f;
   angle += 0.0125f;
-  math::Matrix<double, 3, 3> m = math::Rotate(math::Identity<double, 3>(), angle);
+  math::Matrix<float, 3, 3> m = math::Rotate(math::Identity<float, 3>(), angle);
 
 
   float points[4*2];

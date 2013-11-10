@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <algorithm>
 
 /*
  * Using GLES2
@@ -46,7 +47,7 @@ extern "C"
   }
 
 
-  int config_comp(const void * l, const void * r)
+  int config_comp(EGLConfig const & l, EGLConfig const & r)
   {
     return gl_help_compare_config(l, r, _display);
   }
@@ -57,13 +58,16 @@ extern "C"
 
     // init egl here
     _nativeWindow = ANativeWindow_fromSurface(env, jsurface);
+    LOG("FROM SURFACE");
     assert(_nativeWindow);
     _display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    LOG("GOT DISPLAY");
     assert(_display);
 
     //init egl
     EGLint version[2] = {0};
     assert(eglInitialize(_display,&version[0], &version[1]));
+    LOG("INITIALIZED");
 
     EGLint attr_list[] = {
         EGL_RED_SIZE, 5,
@@ -71,21 +75,25 @@ extern "C"
         EGL_BLUE_SIZE, 5,
         EGL_STENCIL_SIZE, 0,
         EGL_DEPTH_SIZE, 16,
-        EGL_RENDERABLE_TYPE,
-        EGL_OPENGL_ES2_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT | EGL_WINDOW_BIT,
         EGL_NONE
     };
 
     EGLConfig configs[40];
-    int num_config;
+    int num_config = 0;
     assert(eglChooseConfig(_display, attr_list, configs, 40, &num_config));
+    LOG("GOT CONFIGS %d", num_config);
+    assert(num_config > 0);
 
-    qsort(configs, num_config, sizeof(EGLConfig), config_comp);
+    std::sort(&configs[0], &configs[num_config], config_comp);
+    LOG("SORTED CONFIGS");
 
     for (int i = 0; i < num_config; ++i)
     {
         EGLConfig currentConfig = configs[i];
         _surface = eglCreateWindowSurface(_display, currentConfig, _nativeWindow, 0);
+        LOG("CREATING WS");
 
         if (_surface == EGL_NO_SURFACE)
           continue;
@@ -94,7 +102,10 @@ extern "C"
             EGL_CONTEXT_CLIENT_VERSION, 2,
             EGL_NONE
         };
+
         _context = eglCreateContext(_display, currentConfig, EGL_NO_CONTEXT, contextAttrList);
+        LOG("CREATING CONT");
+
         if (_context == EGL_NO_CONTEXT)
         {
             eglDestroySurface(_display, _surface);
@@ -111,11 +122,6 @@ extern "C"
 
     _renderer->SetUpEgl(_config, _context, _surface, _display);
     _renderer->Start();
-
-    // TODO move to threads
-//    // binding context
-//    assert(eglMakeCurrent(_display, _surface, _surface, _context));
-//    LOG("CONTEXT BINDED");
   }
 
   void destroyEgl(JNIEnv * env)
