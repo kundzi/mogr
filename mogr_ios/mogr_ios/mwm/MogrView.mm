@@ -7,7 +7,6 @@
 //
 
 #import "MogrView.h"
-
 #import "renderer.h"
 
 @implementation MogrView
@@ -56,6 +55,7 @@
     m_renderer->Stop();
     delete m_renderer;
   }
+  
   m_renderer = new GlRenderer;
   m_renderer->Start((CAEAGLLayer *)self.layer);
 }

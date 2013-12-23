@@ -73,7 +73,10 @@ void GlRenderer::Start(CAEAGLLayer * layer)
     pthread_attr_setdetachstate(&_attrs, PTHREAD_CREATE_JOINABLE);
     
     pthread_create(&_mainThread, &_attrs, GlRenderer::_runMainThread, (void*)this);
+    
+    // because for strange dispatcher we have to wait
     usleep(1000*1000);
+    
     pthread_create(&_updateThread, &_attrs, GlRenderer::_runUpdateThread, (void*)this);
     
     NSLog(@"PTHREAD OK");
@@ -151,8 +154,6 @@ void GlRenderer::RunMainThread()
   
   //{@
   GL_CHECK(glUseProgram(_programId));
-  
-  NSLog(@"VAO IS: %d", _vao);
   GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, _bufferId));
   
   GLint posAttrLoc =  glGetAttribLocation(_programId, "position");

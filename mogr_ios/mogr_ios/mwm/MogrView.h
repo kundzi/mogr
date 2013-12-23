@@ -9,7 +9,4 @@
 #import <UIKit/UIKit.h>
 
 @interface MogrView : UIView
-
-
-
 @end
