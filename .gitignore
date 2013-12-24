@@ -39,3 +39,7 @@ xcuserdata
 profile
 *.moved-aside
 DerivedData
+
+# Qt
+build-*/
+*.user
