@@ -2,7 +2,7 @@
 
 #include <QDebug>
 #include <QThread>
-#include <QGLPixelBuffer>
+#include <QOpenGLContext>
 
 #import "../../src/jni/shaders.h"
 #import "../../src/jni/transformations.hpp"
@@ -37,20 +37,19 @@ namespace {
   const long FRAMERATE = 1000*1000/30;
   const long UPDATERATE = 1000*1000/30;
 
-  QGLContext * m_drawContext;
-  QGLContext * m_updateContext;
+  QOpenGLContext * m_drawContext;
+  QOpenGLContext * m_updateContext;
 }
 
-void GlRenderer::Start()
+void GlRenderer::Start(QWindow * surface)
 {
   doLogDraw = true;
   doLogUpdate = true;
   doUpdate = true;
 
-  qDebug() << width << height;
-
   if (!_isRunning)
   {
+    m_surface = surface;
     qDebug() << "INITIALAZING PTHREAD";
 
     _isRunning = true;
@@ -95,20 +94,13 @@ void GlRenderer::Stop()
 
 void GlRenderer::RunMainThread()
 {
-  QGLContext * tempContext = m_glwidget->context();
-  m_drawContext = new QGLContext(tempContext->format(), m_glwidget);
-
-  Q_ASSERT(m_drawContext->create(tempContext));
-  Q_ASSERT(m_drawContext->isSharing());
-
-  tempContext = m_glwidget->context();
-  m_updateContext = new QGLContext(tempContext->format(), m_glwidget);
-
-  Q_ASSERT(m_updateContext->create(tempContext));
-  Q_ASSERT(m_updateContext->isSharing());
+  m_drawContext = new QOpenGLContext();
+  m_drawContext->setFormat(m_surface->requestedFormat());
+  Q_ASSERT(m_drawContext->create());
+  Q_ASSERT(m_drawContext->isValid());
 
 
-  m_drawContext->makeCurrent();
+  usleep(500 * 1000);
 
   qDebug() << "MAIN CONTEXT OK";
 
@@ -119,39 +111,17 @@ void GlRenderer::RunMainThread()
   qDebug() << "MAIN THREAD RESUMED";
   pthread_mutex_unlock(&_mutex);
 
-//  glGenRenderbuffers(1, &m_renderBuffId);
-//  GL_CHECK_AFTER();
-//  glBindRenderbuffer(GL_RENDERBUFFER, m_renderBuffId);
-//  GL_CHECK_AFTER();
+  m_drawContext->makeCurrent(m_surface);
 
-//  glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &width);
-//  GL_CHECK_AFTER();
-//  glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &height);
-//  GL_CHECK_AFTER();
-//  qDebug() << "Size: " << width << "x" << height;
+  qDebug() << "Shared for draw : " << m_drawContext->shareContext();
 
-//  glGenRenderbuffers(1, &m_depthBuffId);
-//  GL_CHECK_AFTER();
-//  glBindRenderbuffer(GL_RENDERBUFFER, m_depthBuffId);
-//  GL_CHECK_AFTER();
-//  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, width, height);
-//  GL_CHECK_AFTER();
+  qDebug() << "Draw context : " << m_drawContext;
+  qDebug() << "Upload context : " << m_updateContext;
 
-//  glGenFramebuffers(1, &m_frameBuffId);
-//  GL_CHECK_AFTER();
-//  glBindFramebuffer(GL_FRAMEBUFFER, m_frameBuffId);
-//  GL_CHECK_AFTER();
-
-//  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, m_renderBuffId);
-//  GL_CHECK_AFTER();
-//  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthBuffId);
-//  GL_CHECK_AFTER();
-
-//  GLenum res = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-//  qDebug() << "Check Framebuffer: " << res, res == GL_FRAMEBUFFER_COMPLETE;
-
-//  GL_CHECK(glBindRenderbuffer(GL_RENDERBUFFER, m_renderBuffId));
-
+  QOpenGLContextGroup * group = QOpenGLContextGroup::currentContextGroup();
+  QList<QOpenGLContext *> list = group->shares();
+  for (int i = 0; i < list.size(); ++i)
+    qDebug() << "Shared context : " << list[i];
 
   //{@
   GL_CHECK(glUseProgram(_programId));
@@ -176,9 +146,13 @@ void GlRenderer::RunMainThread()
 
 void GlRenderer::RunUpdateThread()
 {
-  m_updateContext = new QGLContext(m_glwidget->format(), m_glwidget);
-  Q_ASSERT(m_updateContext->create(m_drawContext));
-  m_updateContext->makeCurrent();
+  m_updateContext = new QOpenGLContext();
+  m_updateContext->setShareContext(m_drawContext);
+  m_updateContext->setFormat(m_surface->requestedFormat());
+  Q_ASSERT(m_updateContext->create());
+  Q_ASSERT(m_updateContext->isValid());
+  m_updateContext->makeCurrent(m_surface);
+
 
   Init();
   pthread_cond_broadcast(&_cond);
@@ -224,6 +198,7 @@ GLuint GlRenderer::LoadShader(const char * shaderSrc, GLenum type)
     glGetShaderInfoLog(shaderId, 1024, &lengh, buff);
 
     qDebug() << "SHADER COMPILE ERROR: " << string(buff, lengh).c_str();
+    Q_ASSERT(false);
   }
 
   return shaderId;
@@ -233,6 +208,7 @@ GLuint GlRenderer::LoadShader(const char * shaderSrc, GLenum type)
 void GlRenderer::LinkProgram()
 {
   _programId = glCreateProgram();
+  GLenum e = glGetError();
   GL_CHECK_AFTER();
 
   GLuint vShader = LoadShader(Shaders::Vertex, GL_VERTEX_SHADER);
@@ -303,7 +279,7 @@ void GlRenderer::Draw()
   GL_CHECK_AFTER();
   Q_ASSERT(projectionLoc != -1);
 
-  float aspect = (float)width/height;
+  //float aspect = (float)width/height;
   float modelView[16] =
   {
     -1.0, 0.0,  0.0, 0.0,
@@ -325,7 +301,8 @@ void GlRenderer::Draw()
 
   GL_CHECK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
 
-  m_drawContext->swapBuffers();
+  m_drawContext->makeCurrent(m_drawContext->surface());
+  m_drawContext->swapBuffers(m_drawContext->surface());
 
   GL_CHECK(glUseProgram(0));
 }

@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui opengl
+QT       += core gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -13,10 +13,12 @@ TEMPLATE = app
 
 
 SOURCES += main.cpp\
-        mogrwindow.cpp \
-        mogrview.cpp \
         glrenderer.cpp \
+    mogr_surface.cpp \
+    mogrwindow.cpp
 
 HEADERS  += mogrwindow.hpp \
-            mogrview.hpp \
             glrenderer.hpp \
+    mogr_surface.hpp
+
+OBJECTIVE_SOURCES +=

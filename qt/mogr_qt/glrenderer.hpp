@@ -1,16 +1,11 @@
 #ifndef GLRENDERER_HPP
 #define GLRENDERER_HPP
 
-#include <QGLWidget>
+#include <QWindow>
+#include <OpenGL.h>
 
 class GlRenderer
 {
-public:
-  GlRenderer(QGLWidget * glwidget)
-    : m_glwidget(glwidget)
-  {}
-
-
 private:
   bool _isRunning;
 
@@ -30,7 +25,7 @@ private:
   //}@ threading
 
   //{@ openGl
-  QGLWidget * m_glwidget;
+  QWindow * m_surface;
 
   GLuint m_frameBuffId;
   GLuint m_renderBuffId;
@@ -65,8 +60,9 @@ public:
     Stop();
   }
 
-  void Start();
+  void Start(QWindow * surface);
   void Stop();
+  bool IsStarted() { return _isRunning; }
 
   void Init();
   void Draw();
